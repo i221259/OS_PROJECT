@@ -76,7 +76,9 @@ float scaredTime=0;
 string currentDirection="right";
 int score=0;
 int lives=3;
-bool gameRun=1;
+bool gameRun=0;
+bool startMenu=1;
+bool exitMenu = 0;
 RenderWindow window(VideoMode(BOARD_WIDTH * CELL_SIZE *1.4, BOARD_HEIGHT * CELL_SIZE), "Pac-Man");
 
 map<string, string> directionToImage = {
@@ -102,11 +104,11 @@ void* pacmanController(void* arg);
 int main() {
     pthread_t engine_thread, ui_thread, ghost_threads[NUM_GHOSTS],pacman_thread;
 
-    
+   
     sem_init(&keys, 0, 2);    // Initialize each semaphore to 1 (binary semaphore)
     sem_init(&permits, 0, 2); // Initialize each semaphore to 1
-    
-    
+   
+   
 
 if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
     std::cout << "Current Path: " << currentPath << std::endl;
@@ -128,7 +130,8 @@ if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
 
     // Create user interface thread which handles all SFML operations
     pthread_create(&ui_thread, NULL, userInterface, NULL);
-
+while(!gameRun)
+sleep(1);
     // Start other threads
     pthread_create(&engine_thread, NULL, gameEngine, NULL);
         sleep(0.5); // Ensure SFML is fully up and running
@@ -142,6 +145,10 @@ if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
     // Join threads
     while(gameRun);
 
+    pthread_create(&ui_thread, NULL, userInterface, NULL);
+    while(exitMenu);
+    sleep(1);
+
     // Clean up
     sem_destroy(&keys);
     sem_destroy(&permits);
@@ -154,8 +161,10 @@ if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
 
 
 void* pacmanController(void* arg) {
+    while(startMenu)
+    sleep(1);
     while (gameRun) {
-        	pthread_mutex_lock(&sfml_mutex);
+        pthread_mutex_lock(&sfml_mutex);
             //cout<<"sfml lock pacman"<<endl;
 
         if (window.isOpen()) {
@@ -204,23 +213,24 @@ void* pacmanController(void* arg) {
                 powerPellets--;
                 scared=1;
                 scaredTime=gameclock.getElapsedTime().asSeconds() + 5.0;
-                cout<<"************SCARED TIME IS : ****** "<<scaredTime<<endl;
+                cout<<"**SCARED TIME IS : ****** "<<scaredTime<<endl;
             }
 
             pthread_mutex_unlock(&board_mutex); //synchronization scenario # 1
                 pthread_mutex_unlock(&power_mutex);
 
-            
+           
             if(lives<=0){
                 cout<<"PLAYER MUK GAYA";
                 cout<<"GAME OVER";
                 gameRun=0;
+                exitMenu = 1;
                 sleep(1);
             }
-        	pthread_mutex_unlock(&sfml_mutex);
+        pthread_mutex_unlock(&sfml_mutex);
             //cout<<"sfml unlock pacman"<<endl;
 
-	usleep(100000); // Sleep for 50 ms
+usleep(100000); // Sleep for 50 ms
         }
     }
     return NULL;
@@ -229,7 +239,8 @@ void* pacmanController(void* arg) {
 
 
 void* gameEngine(void* arg) {
-    
+    while(startMenu)
+    sleep(1);
     pthread_mutex_lock(&sfml_mutex);
     //cout<<"sfml lock game engine"<<endl;
     RectangleShape background(Vector2f(CELL_SIZE, CELL_SIZE));
@@ -241,19 +252,19 @@ void* gameEngine(void* arg) {
         ghost[i].x=10 + i;
         ghost[i].y=12;
     }
-    
-	sf::Font font;
-	if (!font.loadFromFile("font.ttf"))
-	{
-	    cout<<"cant Load Font"<<endl;
-	}
-	Text scoreText;
-	scoreText.setFillColor(Color::White);
-	scoreText.setFont(font);
-	scoreText.setPosition(BOARD_WIDTH * CELL_SIZE +10, BOARD_HEIGHT * CELL_SIZE*0.1);
-	scoreText.setCharacterSize(CELL_SIZE*0.8); // in pixels, not points!
-	
-	Texture flashTex;
+   
+sf::Font font;
+if (!font.loadFromFile("font.ttf"))
+{
+   cout<<"cant Load Font"<<endl;
+}
+Text scoreText;
+scoreText.setFillColor(Color::White);
+scoreText.setFont(font);
+scoreText.setPosition(BOARD_WIDTH * CELL_SIZE +10, BOARD_HEIGHT * CELL_SIZE*0.1);
+scoreText.setCharacterSize(CELL_SIZE*0.8); // in pixels, not points!
+
+Texture flashTex;
     flashTex.loadFromFile("flash.png");
     Sprite flash;
     flash.setTexture(flashTex);
@@ -261,12 +272,12 @@ void* gameEngine(void* arg) {
     Sprite powerSprite;
     powerTex.loadFromFile("cherry.png");
     powerSprite.setTexture(powerTex);
-	Texture ghostTexture[NUM_GHOSTS];
-	Sprite ghosts[NUM_GHOSTS];
-	for(int i=0;i<NUM_GHOSTS;i++){
-		ghostTexture[i].loadFromFile("ghost"+to_string(i+1 % 4)+".png");
-		ghosts[i].setTexture(ghostTexture[i]);
-		}
+Texture ghostTexture[NUM_GHOSTS];
+Sprite ghosts[NUM_GHOSTS];
+for(int i=0;i<NUM_GHOSTS;i++){
+ghostTexture[i].loadFromFile("ghost"+to_string(i+1 % 4)+".png");
+ghosts[i].setTexture(ghostTexture[i]);
+}
     sf::Texture wallTexture;
     wallTexture.loadFromFile("brick.png");
     sf::Sprite wall(wallTexture);
@@ -294,36 +305,36 @@ void* gameEngine(void* arg) {
                 gameRun=0;
                 sleep(1);
                 window.close();
-                
+               
             }
         }
         float timePassed=gameclock.getElapsedTime().asSeconds();
-	        window.clear();
+       window.clear();
         // Handle drawing in the main thread only
 
 /*if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
             if (game_board[pacman_y - 1][pacman_x] != 1){
-            	currentDirection="up";
+            currentDirection="up";
                 pacman_y--;
                 }
         } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
             if (game_board[pacman_y + 1][pacman_x] != 1){
                 pacman_y++;
                 currentDirection="down";
-                
+               
                 }
         } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
             if (game_board[pacman_y][pacman_x - 1] != 1){
                 pacman_x--;
                 currentDirection="left";
-                            	}
+                            }
         } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
             if (game_board[pacman_y][pacman_x + 1] != 1){
-		  currentDirection="right";
+ currentDirection="right";
                 pacman_x++;
                 }
         }*/
-	/*pthread_mutex_lock(&board_mutex); //synchronization scenario # 1
+/*pthread_mutex_lock(&board_mutex); //synchronization scenario # 1
         if(game_board[pacman_y][pacman_x] == 0){
                 game_board[pacman_y][pacman_x]=2;
                 score++;
@@ -331,8 +342,8 @@ void* gameEngine(void* arg) {
                 scoreText.setString("SCORE: "+to_string(score));
 
                 }
-                
-	pthread_mutex_unlock(&board_mutex);*/ //synchronization scenario # 1
+               
+pthread_mutex_unlock(&board_mutex);*/ //synchronization scenario # 1
                     scoreText.setString("SCORE: "+to_string(score));
 
         // Background and walls
@@ -363,7 +374,7 @@ void* gameEngine(void* arg) {
             }
             pthread_mutex_unlock(&flash_mutex);
         }
-        
+       
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH; ++j) {
                 background.setPosition(j * CELL_SIZE, i * CELL_SIZE);
@@ -389,12 +400,12 @@ void* gameEngine(void* arg) {
                 }
             }
         }
-        
+       
         for(int i=0;i<NUM_GHOSTS;i++){
                 if(pacman_x==ghost[i].x && pacman_y==ghost[i].y && lives>0 ){
                     if(!scared){
                 lives--;
-                
+               
                 for(int j=0;j<NUM_GHOSTS;j++){
                     ghost[j].isfast=false;
                     ghost[j].timeChanged=false;
@@ -412,15 +423,15 @@ void* gameEngine(void* arg) {
                     cout<<"----------GHOST KILLED ----------"<<endl;
                         ghost[i].x=10 + i;
                         ghost[i].y=12;
-                        ghost[i].canLeave=false; 
+                        ghost[i].canLeave=false;
                     }
-      		}
+      }
 
-            
+           
 
 
         }
-        
+       
         for(int i=0;i<lives;i++){
             liveSprite.setPosition(BOARD_WIDTH * CELL_SIZE +10+i*30,BOARD_HEIGHT * CELL_SIZE*0.2);
             liveSprite.setScale(CELL_SIZE / player.getLocalBounds().width, CELL_SIZE / player.getLocalBounds().height);
@@ -433,7 +444,7 @@ void* gameEngine(void* arg) {
         }
         player.setTexture(pacTexture);
         player.setPosition(pacman_x * CELL_SIZE, pacman_y * CELL_SIZE);
-	    player.setScale(CELL_SIZE / player.getLocalBounds().width, CELL_SIZE / player.getLocalBounds().height);
+   player.setScale(CELL_SIZE / player.getLocalBounds().width, CELL_SIZE / player.getLocalBounds().height);
                        
         for(int i=0;i<NUM_GHOSTS;i++){
                 if(scared){
@@ -441,14 +452,14 @@ void* gameEngine(void* arg) {
                     {
                         scared=0;
                     for(int j=0;j<NUM_GHOSTS;j++){
-		            ghosts[j].setTexture(ghostTexture[j]);
-		            }
+           ghosts[j].setTexture(ghostTexture[j]);
+           }
                     }
                     if(scared)
                     ghosts[i].setTexture(scaredTex);
 
                 }
-            
+           
             ghosts[i].setPosition(ghost[i].x * CELL_SIZE,ghost[i].y * CELL_SIZE);
             ghosts[i].setScale(CELL_SIZE / ghosts[i].getLocalBounds().width, CELL_SIZE / ghosts[i].getLocalBounds().height);
             window.draw(ghosts[i]);
@@ -459,7 +470,7 @@ void* gameEngine(void* arg) {
     pthread_mutex_unlock(&sfml_mutex);
     //cout<<"sfml unlock game enginer"<<endl;
 
-	usleep(100); // Sleep for 50 ms
+usleep(100); // Sleep for 50 ms
     }
 
     return NULL;
@@ -470,7 +481,58 @@ void* gameEngine(void* arg) {
 
 
 void* userInterface(void* arg) {
-    
+while (startMenu) {
+        pthread_mutex_lock(&sfml_mutex);
+
+        RectangleShape background(Vector2f(CELL_SIZE, CELL_SIZE));
+        background.setFillColor(Color::Black);
+
+        sf::Texture menuTexture;
+        if (!menuTexture.loadFromFile("start.png")) {
+            cerr << "Failed to load start.png" << endl;
+        }
+        sf::Sprite menuSprite(menuTexture);
+        menuSprite.setScale(CELL_SIZE / menuSprite.getLocalBounds().width*32, CELL_SIZE / menuSprite.getLocalBounds().height*25);
+
+        window.draw(menuSprite);
+
+        window.display();
+
+        // Check for Enter key press to exit menu
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Enter)) {
+            startMenu = false;
+            gameRun = true;
+            sleep(1);
+        }
+    pthread_mutex_unlock(&sfml_mutex);
+    }  
+
+
+    while (exitMenu) {
+        pthread_mutex_lock(&sfml_mutex);
+
+        RectangleShape background(Vector2f(CELL_SIZE, CELL_SIZE));
+        background.setFillColor(Color::Black);
+
+        sf::Texture menuTexture;
+        if (!menuTexture.loadFromFile("exit.png")) {
+            cerr << "Failed to exit start.png" << endl;
+        }
+        sf::Sprite menuSprite(menuTexture);
+        menuSprite.setScale(CELL_SIZE / menuSprite.getLocalBounds().width*32, CELL_SIZE / menuSprite.getLocalBounds().height*25);
+
+        window.draw(menuSprite);
+
+        window.display();
+
+        // Check for Enter key press to exit menu
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::E)) {
+            exitMenu=0;
+            sleep(1);
+            window.close();
+        }
+    pthread_mutex_unlock(&sfml_mutex);
+    }    
 
     return NULL;
 }
@@ -527,19 +589,21 @@ std::vector<Node*> findPath(int start_x, int start_y, int target_x, int target_y
 
 
 void* ghostController(void* arg) {
+    while(startMenu)
+    sleep(1);
     int ghost_id = (int)(intptr_t)arg;
-    
-    
+   
+   
     cout<<"Ghost with ID :"<<ghost_id<<endl;
     float sleeptime=140000;
-	if(ghost_id==0)
-		sleeptime *=1.5;
-	if(ghost_id==1)
-		sleeptime*=2;
-	if(ghost_id==2)
-		sleeptime *=3;
-	if(ghost_id==3)
-		sleeptime*=1.3;
+if(ghost_id==0)
+sleeptime *=1.5;
+if(ghost_id==1)
+sleeptime*=2;
+if(ghost_id==2)
+sleeptime *=3;
+if(ghost_id==3)
+sleeptime*=1.3;
 
 
     while (gameRun) {
@@ -556,7 +620,7 @@ void* ghostController(void* arg) {
 
 
 
-		if(ghost[ghost_id].isfast && !ghost[ghost_id].timeChanged){
+if(ghost[ghost_id].isfast && !ghost[ghost_id].timeChanged){
             sleeptime*=0.8;
             ghost[ghost_id].timeChanged=1;
         }
@@ -587,7 +651,7 @@ if (ghost[ghost_id].inHouse && !ghost[ghost_id].canLeave ) {
                 cout<<"Ghost "<<ghost_id<<" got da key"<<endl;
                 sem_wait(&permits); // Then acquire permit
                 cout<<"Ghost "<<ghost_id<<" got da permit"<<endl;
-                
+               
             }
 
             // Ghost is now ready to leave the house
@@ -600,8 +664,8 @@ if (ghost[ghost_id].inHouse && !ghost[ghost_id].canLeave ) {
             sem_post(&permits);
         }
     if(ghost[ghost_id].canLeave){
-	// Assuming ghost and Pac-Man positions are updated elsewhere and accessible
-	pthread_mutex_lock(&board_mutex);
+// Assuming ghost and Pac-Man positions are updated elsewhere and accessible
+pthread_mutex_lock(&board_mutex);
     pthread_mutex_lock(&power_mutex);
 
         // Find path to Pacman
@@ -642,7 +706,7 @@ if (ghost[ghost_id].inHouse && !ghost[ghost_id].canLeave ) {
                     ghost[ghost_id].x = newX;
                     ghost[ghost_id].y = newY;
                     break;
-                } 
+                }
             }
 
         }
