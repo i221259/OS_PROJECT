@@ -203,7 +203,7 @@ void* pacmanController(void* arg) {
                 powerPellets--;
                 scared=1;
                 scaredTime=gameclock.getElapsedTime().asSeconds() + 5.0;
-                cout<<"**SCARED TIME IS : ****** "<<scaredTime<<endl;
+                cout<<"************SCARED TIME IS : ****** "<<scaredTime<<endl;
             }
 
             pthread_mutex_unlock(&board_mutex); //synchronization scenario # 1
@@ -391,9 +391,11 @@ void* gameEngine(void* arg) {
                 if(pacman_x==ghost[i].x && pacman_y==ghost[i].y && lives>0 ){
                     if(!scared){
                 lives--;
+                
                 for(int j=0;j<NUM_GHOSTS;j++){
-                    ghost[i].isfast=false;
-                    ghost[i].timeChanged=false;
+                    ghost[j].isfast=false;
+                    ghost[j].timeChanged=false;
+                    ghost[j].canLeave=0;
                 }
                 cout<<"----------CURRENT LIVES: ----------"<<lives<<endl;
                 pacman_x=11;
@@ -560,11 +562,13 @@ if(ghost[ghost_id].x>8 && ghost[ghost_id].x<14 && ghost[ghost_id].y>10 && ghost[
     ghost[ghost_id].timeChanged=0;
     ghost[ghost_id].isfast=0;
         //cout<<"Ghost "<<ghost_id<<" is inside the house"<<endl;
-
 }
 else{
     ghost[ghost_id].inHouse=false;
     //cout<<"Ghost "<<ghost_id<<" has left the house"<<endl;
+}
+if(!ghost[ghost_id].canLeave ){
+    cout<<"Ghost "<<ghost_id<<" cannot leave"<<endl;
 }
 
 if (ghost[ghost_id].inHouse && !ghost[ghost_id].canLeave ) {
