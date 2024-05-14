@@ -61,6 +61,7 @@ struct ghostPos{
 int x;
 int y;
 bool inHouse=true;
+bool canLeave=false;
 };
 
 int powerPellets=4;
@@ -82,7 +83,7 @@ map<string, string> directionToImage = {
     {"down", "pac-down.png"}
 };
 
-sem_t ghost_sem, pellet_sem, house_sem, boost_sem;
+sem_t ghost_sem, pellet_sem, house_sem, boost_sem,keys,permits;
 pthread_mutex_t board_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sfml_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t lives_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -100,6 +101,10 @@ int main() {
     sem_init(&pellet_sem, 0, 1);
     sem_init(&house_sem, 0, NUM_GHOSTS);
     sem_init(&boost_sem, 0, NUM_SPEED_BOOSTS);
+        sem_init(&keys, 0, 2);    // Initialize each semaphore to 1 (binary semaphore)
+        sem_init(&permits, 0, 2); // Initialize each semaphore to 1
+    
+    
 
 if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
     std::cout << "Current Path: " << currentPath << std::endl;
@@ -113,7 +118,7 @@ if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
 
     // Start other threads
     pthread_create(&engine_thread, NULL, gameEngine, NULL);
-        sleep(2); // Ensure SFML is fully up and running
+        sleep(0.5); // Ensure SFML is fully up and running
 
     pthread_create(&pacman_thread, NULL, pacmanController, NULL);
 
@@ -493,13 +498,40 @@ void* ghostController(void* arg) {
 		
 if(ghost[ghost_id].x>8 && ghost[ghost_id].x<14 && ghost[ghost_id].y>10 && ghost[ghost_id].y<14){
     ghost[ghost_id].inHouse=true;
-        cout<<"Ghost "<<ghost_id<<" is inside the house"<<endl;
+        //cout<<"Ghost "<<ghost_id<<" is inside the house"<<endl;
 
 }
 else{
     ghost[ghost_id].inHouse=false;
-    cout<<"Ghost "<<ghost_id<<" has left the house"<<endl;
+    //cout<<"Ghost "<<ghost_id<<" has left the house"<<endl;
 }
+
+if (ghost[ghost_id].inHouse && !ghost[ghost_id].canLeave ) {
+    cout<<"Ghost "<<ghost_id<<"waiting for za key"<<endl;
+            // Different order for ghost #3 to prevent deadlock
+            if (ghost_id == 3) {
+                sem_wait(&permits); // First acquire permit
+                cout<<"Ghost "<<ghost_id<<" got da permit"<<endl;
+                sem_wait(&keys);    // Then acquire key
+                cout<<"Ghost "<<ghost_id<<" got da key"<<endl;
+            } else {
+                sem_wait(&keys);    // First acquire key
+                cout<<"Ghost "<<ghost_id<<" got da key"<<endl;
+                sem_wait(&permits); // Then acquire permit
+                cout<<"Ghost "<<ghost_id<<" got da permit"<<endl;
+                
+            }
+
+            // Ghost is now ready to leave the house
+            ghost[ghost_id].canLeave = true;
+            sleep(2);
+            cout << "Ghost " << ghost_id << " is leaving the house." << endl;
+
+            // Release the resources after leaving the house
+            sem_post(&keys);
+            sem_post(&permits);
+        }
+    if(ghost[ghost_id].canLeave){
 	// Assuming ghost and Pac-Man positions are updated elsewhere and accessible
 	pthread_mutex_lock(&board_mutex);
     pthread_mutex_lock(&power_mutex);
@@ -556,10 +588,8 @@ else{
 
         usleep(sleeptime); // Sleep for 50 ms
     }
+    }
 
 exit(0);
 
 }
-
-
-
