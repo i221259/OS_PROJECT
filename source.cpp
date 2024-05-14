@@ -162,8 +162,9 @@ void* pacmanController(void* arg) {
             sf::Event event;
             while (window.pollEvent(event)) {
                 if (event.type == sf::Event::Closed) {
+                    gameRun = 0;sleep(1);
+                    sleep(1);
                     window.close();
-                    gameRun = 0;
                 }
             }
 
@@ -214,6 +215,7 @@ void* pacmanController(void* arg) {
                 cout<<"PLAYER MUK GAYA";
                 cout<<"GAME OVER";
                 gameRun=0;
+                sleep(1);
             }
         	pthread_mutex_unlock(&sfml_mutex);
             //cout<<"sfml unlock pacman"<<endl;
@@ -289,9 +291,10 @@ void* gameEngine(void* arg) {
         sf::Event event;
         while (gameRun && window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
-                window.close();
                 gameRun=0;
                 sleep(1);
+                window.close();
+                
             }
         }
         float timePassed=gameclock.getElapsedTime().asSeconds();
