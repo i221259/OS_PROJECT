@@ -2,19 +2,28 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
-#include <iostream>
 #include <map>
-#include <atomic>
-#include<string>
+#include <string>
 #include <queue>
 #include <vector>
 #include <utility> // For std::pair
 #include <climits>
+#include <cmath>
+#include <iostream>
+#include <unistd.h>
+#include <iostream>
+#include <limits.h>  // For PATH_MAX definition
+
+char currentPath[PATH_MAX];
+
 
 using namespace std;
 using namespace sf;
 
 #define NUM_SPEED_BOOSTS 2
+#include <iostream>
+#include <filesystem> // C++17 filesystem library
+
 
 #define BOARD_WIDTH 23
 #define BOARD_HEIGHT 24
@@ -52,10 +61,10 @@ struct ghostPos{
 int x;
 int y;
 };
-
+Texture pacTexture;
 struct ghostPos ghost[NUM_GHOSTS];
 
-
+string currentDirection="right";
 int score=0;
 int lives=3;
 bool gameRun=1;
@@ -71,11 +80,12 @@ map<string, string> directionToImage = {
 sem_t ghost_sem, pellet_sem, house_sem, boost_sem;
 pthread_mutex_t board_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sfml_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lives_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void* gameEngine(void* arg);
 void* userInterface(void* arg);
 void* ghostController(void* arg);
-
+void* pacmanController(void* arg);
 int main() {
     pthread_t engine_thread, ui_thread, ghost_threads[NUM_GHOSTS],pacman_thread;
 
@@ -84,14 +94,20 @@ int main() {
     sem_init(&house_sem, 0, NUM_GHOSTS);
     sem_init(&boost_sem, 0, NUM_SPEED_BOOSTS);
 
-
+if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
+    std::cout << "Current Path: " << currentPath << std::endl;
+} else {
+    perror("getcwd() error");
+    return 1;
+}
 
     // Create user interface thread which handles all SFML operations
     pthread_create(&ui_thread, NULL, userInterface, NULL);
-    sleep(2); // Ensure SFML is fully up and running
 
     // Start other threads
     pthread_create(&engine_thread, NULL, gameEngine, NULL);
+        sleep(2); // Ensure SFML is fully up and running
+
     pthread_create(&pacman_thread, NULL, pacmanController, NULL);
 
     for (int i = 0; i < NUM_GHOSTS; i++) {
@@ -114,10 +130,10 @@ int main() {
 
 
 
-
 void* pacmanController(void* arg) {
     while (gameRun) {
         	pthread_mutex_lock(&sfml_mutex);
+            cout<<"sfml lock pacman"<<endl;
 
         if (window.isOpen()) {
             sf::Event event;
@@ -129,7 +145,6 @@ void* pacmanController(void* arg) {
             }
 
             pthread_mutex_lock(&board_mutex);
-            string currentDirection = "right"; // Default initial direction
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
                 if (game_board[pacman_y - 1][pacman_x] != 1) {
                     currentDirection = "up";
@@ -153,24 +168,31 @@ void* pacmanController(void* arg) {
             }
 
             // Update game board with Pac-Man's new position
+            pthread_mutex_unlock(&board_mutex); //synchronization scenario # 1
+            
             if (game_board[pacman_y][pacman_x] == 0) {
                 game_board[pacman_y][pacman_x] = 2;  // Mark Pac-Man's position on the board
                 score++;
             }
+            pthread_mutex_unlock(&board_mutex); //synchronization scenario # 1
+
             for(int i=0;i<NUM_GHOSTS;i++){
-                if(pacman_x==ghost[i].x && pacman_y==ghost[i].y){
+                if(pacman_x==ghost[i].x && pacman_y==ghost[i].y && lives>0){
                 lives--;
+                cout<<"----------CURRENT LIVES: ----------"<<lives<<endl;
                 pacman_x=11;
                 pacman_y=14;
       		}
         }
-            if(lives==0){
+            if(lives<=0){
                 cout<<"PLAYER MUK GAYA";
+                cout<<"GAME OVER";
                 gameRun=0;
             }
         	pthread_mutex_unlock(&sfml_mutex);
+            cout<<"sfml unlock pacman"<<endl;
 
-            usleep(10000); // Sleep to throttle the update speed
+	usleep(100000); // Sleep for 50 ms
         }
     }
     return NULL;
@@ -179,15 +201,17 @@ void* pacmanController(void* arg) {
 
 
 void* gameEngine(void* arg) {
+    
     pthread_mutex_lock(&sfml_mutex);
+    cout<<"sfml lock game engine"<<endl;
     RectangleShape background(Vector2f(CELL_SIZE, CELL_SIZE));
     background.setFillColor(Color::Black);
 
     CircleShape food(CELL_SIZE / 8);
     food.setFillColor(Color::White);
     for(int i=0;i<NUM_GHOSTS;i++){
-    ghost[i].x=10 + i;
-    ghost[i].y=12;
+        ghost[i].x=10 + i;
+        ghost[i].y=12;
     }
 
 	sf::Font font;
@@ -208,37 +232,39 @@ void* gameEngine(void* arg) {
 	for(int i=0;i<NUM_GHOSTS;i++){
 		ghostTexture[i].loadFromFile("ghost"+to_string(i+1 % 4)+".png");
 		ghosts[i].setTexture(ghostTexture[i]);
-		
 		}
-    sf::Texture wallTexture, pacTexture;
+    sf::Texture wallTexture;
     wallTexture.loadFromFile("brick.png");
     sf::Sprite wall(wallTexture);
     wall.setScale(CELL_SIZE / wall.getLocalBounds().width, CELL_SIZE / wall.getLocalBounds().height);
 
     sf::Sprite player;
-    string currentDirection = "right"; // Default direction
     Texture liveTex;
     if(!liveTex.loadFromFile("pac-right.png")){
     cout<<"Live Texture not found"<<endl;
     }
     Sprite liveSprite(liveTex);
-    
+    pthread_mutex_unlock(&sfml_mutex);
+                cout<<"sfml unlock game engine"<<endl;
     
 
 
     // Main event loop
-    while (window.isOpen()) {
+    while (window.isOpen() && gameRun) {
+        pthread_mutex_lock(&sfml_mutex);
+                cout<<"sfml lock game engine"<<endl;
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
                 window.close();
                 gameRun=0;
+                sleep(1);
             }
         }
 
         // Handle drawing in the main thread only
         window.clear();
-if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+/*if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
             if (game_board[pacman_y - 1][pacman_x] != 1){
             	currentDirection="up";
                 pacman_y--;
@@ -259,9 +285,8 @@ if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
 		  currentDirection="right";
                 pacman_x++;
                 }
-        }
-        usleep(10000);
-	pthread_mutex_lock(&board_mutex); //synchronization scenario # 1
+        }*/
+	/*pthread_mutex_lock(&board_mutex); //synchronization scenario # 1
         if(game_board[pacman_y][pacman_x] == 0){
                 game_board[pacman_y][pacman_x]=2;
                 score++;
@@ -269,7 +294,10 @@ if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
                 scoreText.setString("SCORE: "+to_string(score));
 
                 }
-	pthread_mutex_unlock(&board_mutex); //synchronization scenario # 1
+                
+	pthread_mutex_unlock(&board_mutex);*/ //synchronization scenario # 1
+                    scoreText.setString("SCORE: "+to_string(score));
+
         // Background and walls
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH; ++j) {
@@ -314,8 +342,9 @@ if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
 	window.draw(scoreText);
 	window.display();
     pthread_mutex_unlock(&sfml_mutex);
+    cout<<"sfml unlock game enginer"<<endl;
 
-	usleep(10000); // Sleep for 50 ms
+	usleep(1000); // Sleep for 50 ms
     }
 
     return NULL;
@@ -331,12 +360,6 @@ void* userInterface(void* arg) {
     return NULL;
 }
 
-#include <queue>
-#include <vector>
-#include <cmath>
-#include <queue>
-#include <vector>
-#include <iostream>
 
 struct Node {
     int x, y;
@@ -394,35 +417,31 @@ void* ghostController(void* arg) {
     cout<<"Ghost with ID :"<<ghost_id<<endl;
     int sleeptime=140000;
 	if(ghost_id==0)
-		sleeptime *=1.1;
+		sleeptime *=1.5;
 	if(ghost_id==1)
 		sleeptime*=2;
 	if(ghost_id==2)
 		sleeptime *=3;
 	if(ghost_id==3)
 		sleeptime*=1.3;
-    while (true) {
+
+    while (gameRun) {
 		
 	// Assuming ghost and Pac-Man positions are updated elsewhere and accessible
-
-
-
-
 	pthread_mutex_lock(&board_mutex);
 
         // Find path to Pacman
         std::vector<Node*> path = findPath(ghost[ghost_id].x, ghost[ghost_id].y, pacman_x, pacman_y);
-
-
-
         // Follow the path if it's not empty
-                	int i=0;
-                if (!path.empty()) {
+        int i=0;
+        if (!path.empty()) {
 
             // Move towards the next node in the path
-            while(path[i]->x == ghost[ghost_id].x && path[i]->y == ghost[ghost_id].y && i<path.size())
+        while(i<path.size() && path[i]->x == ghost[ghost_id].x && path[i]->y == ghost[ghost_id].y )
             i++;
-            }
+        }
+        if(i==path.size())
+        i--;
         if (!path.empty()) {
         
             ghost[ghost_id].x = path[i]->x;
@@ -437,7 +456,6 @@ void* ghostController(void* arg) {
         usleep(sleeptime); // Sleep for 50 ms
     }
 
-    return NULL;
+exit(0);
+
 }
-
-
