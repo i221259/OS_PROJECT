@@ -35,7 +35,7 @@ int game_board[BOARD_HEIGHT][BOARD_WIDTH] = {
 {1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1},
 {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1},
 {1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1},
-{1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 2, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1},
+{1, 0, 0, 0, 1, 0, 1, 4, 1, 0, 1, 2, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1},
 {1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1},
 {1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1},
 {1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1},
@@ -45,7 +45,7 @@ int game_board[BOARD_HEIGHT][BOARD_WIDTH] = {
 {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1},
 {1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1},
 {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1},
-{1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1},
+{1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 4, 1, 0, 1, 1, 1, 1, 1},
 {1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1},
 {1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1},
 {1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 2, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1},
@@ -62,8 +62,11 @@ int x;
 int y;
 bool inHouse=true;
 bool canLeave=false;
+bool isfast=false;
+bool canfast=false;
+bool timeChanged=false;
 };
-
+int flashes=2;
 int powerPellets=4;
 Texture pacTexture;
 struct ghostPos ghost[NUM_GHOSTS];
@@ -88,6 +91,8 @@ pthread_mutex_t board_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sfml_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t lives_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t power_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t flash_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 
 void* gameEngine(void* arg);
@@ -97,12 +102,9 @@ void* pacmanController(void* arg);
 int main() {
     pthread_t engine_thread, ui_thread, ghost_threads[NUM_GHOSTS],pacman_thread;
 
-    sem_init(&ghost_sem, 0, 1);
-    sem_init(&pellet_sem, 0, 1);
-    sem_init(&house_sem, 0, NUM_GHOSTS);
-    sem_init(&boost_sem, 0, NUM_SPEED_BOOSTS);
-        sem_init(&keys, 0, 2);    // Initialize each semaphore to 1 (binary semaphore)
-        sem_init(&permits, 0, 2); // Initialize each semaphore to 1
+    
+    sem_init(&keys, 0, 2);    // Initialize each semaphore to 1 (binary semaphore)
+    sem_init(&permits, 0, 2); // Initialize each semaphore to 1
     
     
 
@@ -112,6 +114,17 @@ if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
     perror("getcwd() error");
     return 1;
 }
+    int n=rand()%4;
+    int m;
+    ghost[n].canfast=true;
+    cout<<"Ghost "<<n<<" can be Fast"<<endl;
+    while(1){
+    m=rand()%4;
+    if(m!=n)
+    break;
+    }
+    ghost[m].canfast=true;
+    cout<<"Ghost "<<m<<" can be Fast"<<endl;
 
     // Create user interface thread which handles all SFML operations
     pthread_create(&ui_thread, NULL, userInterface, NULL);
@@ -130,10 +143,8 @@ if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
     while(gameRun);
 
     // Clean up
-    sem_destroy(&ghost_sem);
-    sem_destroy(&pellet_sem);
-    sem_destroy(&house_sem);
-    sem_destroy(&boost_sem);
+    sem_destroy(&keys);
+    sem_destroy(&permits);
     pthread_mutex_destroy(&board_mutex);
 
     return 0;
@@ -192,7 +203,7 @@ void* pacmanController(void* arg) {
                 powerPellets--;
                 scared=1;
                 scaredTime=gameclock.getElapsedTime().asSeconds() + 5.0;
-                cout<<"************SCARED TIME IS : ****** "<<scaredTime<<endl;
+                cout<<"**SCARED TIME IS : ****** "<<scaredTime<<endl;
             }
 
             pthread_mutex_unlock(&board_mutex); //synchronization scenario # 1
@@ -240,7 +251,10 @@ void* gameEngine(void* arg) {
 	scoreText.setPosition(BOARD_WIDTH * CELL_SIZE +10, BOARD_HEIGHT * CELL_SIZE*0.1);
 	scoreText.setCharacterSize(CELL_SIZE*0.8); // in pixels, not points!
 	
-	
+	Texture flashTex;
+    flashTex.loadFromFile("flash.png");
+    Sprite flash;
+    flash.setTexture(flashTex);
     Texture powerTex;
     Sprite powerSprite;
     powerTex.loadFromFile("cherry.png");
@@ -332,6 +346,20 @@ void* gameEngine(void* arg) {
             }
             pthread_mutex_unlock(&power_mutex);
         }
+
+        if(flashes<2){
+            pthread_mutex_lock(&flash_mutex);
+            flashes++;
+            while(1){
+                int x=rand()%23;
+                int y=rand()%24;
+                if(game_board[x][y]==2){
+                    game_board[x][y]=4;
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&flash_mutex);
+        }
         
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH; ++j) {
@@ -351,6 +379,11 @@ void* gameEngine(void* arg) {
                     window.draw(powerSprite);
 
                 }
+                if (game_board[i][j] == 4) {
+                    flash.setPosition(j * CELL_SIZE , i * CELL_SIZE );
+                    flash.setScale(CELL_SIZE / flash.getLocalBounds().width, CELL_SIZE / flash.getLocalBounds().height);
+                    window.draw(flash);
+                }
             }
         }
         
@@ -358,6 +391,10 @@ void* gameEngine(void* arg) {
                 if(pacman_x==ghost[i].x && pacman_y==ghost[i].y && lives>0 ){
                     if(!scared){
                 lives--;
+                for(int j=0;j<NUM_GHOSTS;j++){
+                    ghost[i].isfast=false;
+                    ghost[i].timeChanged=false;
+                }
                 cout<<"----------CURRENT LIVES: ----------"<<lives<<endl;
                 pacman_x=11;
                 pacman_y=14;
@@ -370,8 +407,12 @@ void* gameEngine(void* arg) {
                     cout<<"----------GHOST KILLED ----------"<<endl;
                         ghost[i].x=10 + i;
                         ghost[i].y=12;
+                        ghost[i].canLeave=false; 
                     }
       		}
+
+            
+
 
         }
         
@@ -483,8 +524,9 @@ std::vector<Node*> findPath(int start_x, int start_y, int target_x, int target_y
 void* ghostController(void* arg) {
     int ghost_id = (int)(intptr_t)arg;
     
+    
     cout<<"Ghost with ID :"<<ghost_id<<endl;
-    int sleeptime=140000;
+    float sleeptime=140000;
 	if(ghost_id==0)
 		sleeptime *=1.5;
 	if(ghost_id==1)
@@ -494,10 +536,29 @@ void* ghostController(void* arg) {
 	if(ghost_id==3)
 		sleeptime*=1.3;
 
+
     while (gameRun) {
-		
+
+
+        pthread_mutex_lock(&flash_mutex);
+
+            if(game_board[ghost[ghost_id].y][ghost[ghost_id].x]==4 && ghost[ghost_id].canfast && !ghost[ghost_id].isfast){
+                game_board[ghost[ghost_id].y][ghost[ghost_id].x]=2;
+                flashes--;
+                ghost[ghost_id].isfast=true;
+            }
+            pthread_mutex_unlock(&flash_mutex);
+
+
+
+		if(ghost[ghost_id].isfast && !ghost[ghost_id].timeChanged){
+            sleeptime*=0.8;
+            ghost[ghost_id].timeChanged=1;
+        }
 if(ghost[ghost_id].x>8 && ghost[ghost_id].x<14 && ghost[ghost_id].y>10 && ghost[ghost_id].y<14){
     ghost[ghost_id].inHouse=true;
+    ghost[ghost_id].timeChanged=0;
+    ghost[ghost_id].isfast=0;
         //cout<<"Ghost "<<ghost_id<<" is inside the house"<<endl;
 
 }
