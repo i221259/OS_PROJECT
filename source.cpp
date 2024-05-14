@@ -5,6 +5,7 @@
 #include<iostream>
 #include<map>
 using namespace std;
+
 #define NUM_GHOSTS 4
 #define NUM_SPEED_BOOSTS 2
 
@@ -58,7 +59,7 @@ void* ghostController(void* arg);
 
 int main() {
 
-
+cout<<"hello";
     pthread_t engine_thread, ui_thread, ghost_threads[NUM_GHOSTS],pacman_thread;
     int i;
 
